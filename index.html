@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    <style>
+      html, body, #map {
+      	font-family: 'Alef', sans-serif;
+        height: 100%;
+        padding: 0;
+        margin: 0;
+      }
+      
+    </style>
+
+    <link rel="stylesheet" href="http://libs.cartocdn.com/cartodb.js/v2/themes/css/cartodb.css" />
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
+    <link href='http://fonts.googleapis.com/css?family=Alef' rel='stylesheet' type='text/css'>
+        <!--[if lte IE 8]>
+        <link rel="stylesheet" href="http://libs.cartocdn.com/cartodb.js/v2/themes/css/cartodb.ie.css" />
+    <![endif]-->
+
+  </head>
+    
+  <body>
+    <div id="map"></div>
+  </body>
+
+  <!-- include cartodb.js library -->
+  <script src="http://libs.cartocdn.com/cartodb.js/v2/cartodb.js"></script>
+  <!-- include jquery -->
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <!-- include jquery ui -->
+  <script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+  
+  
+
+  <script>
+	
+	var vizLayer;
+	
+	var tableName = "world_youtube_map";
+	var apiUrl = "http://alexcorbi.cartodb.com/api/v1/viz/"+tableName+"/viz.json";
+	var map;
+		
+    function main() {
+    
+      cartodb.createVis('map', apiUrl, {
+          shareable: true,
+          title: true,
+          description: true,
+          search: true,
+          tiles_loader: true,
+          center_lat: 0,
+          center_lon: 0,
+          zoom: 2
+      })
+      .done(function(vis, layers) {
+      	
+      	vizLayer = layers[1];
+      
+        // layer 0 is the base layer, layer 1 is cartodb layer
+        layers[1].on('featureOver', function(e, pos, latlng, data) {
+          cartodb.log.log(e, pos, latlng, data);
+        });
+
+        // you can get the native map to work with it
+        // depending if you use google maps or leaflet
+        map = vis.getNativeMap();
+        // map.setZoom(3)
+        // map.setCenter(new google.maps.Latlng(...))
+        
+        // Execute SQL Query to retrieve polygons and urls
+        var sql = new cartodb.SQL({ user: 'alexcorbi' , format:'geojson'});
+		sql.execute("select * from "+tableName+" where youtube_url is not null")
+	
+  		.done(function(data) {
+    		
+    		console.log("number of features "+data.features.length);
+    		
+    		// Add HTML5 Canvas on the map
+		    var tiles = new L.TileLayer.Canvas();
+		
+			tiles.drawTile = function (canvas, tile, zoom) {
+			
+			    var context = canvas.getContext('2d');
+			
+			    // circle radius
+			    var radius = 1;
+			
+			    var tileSize = this.options.tileSize;
+			    
+			    var firstPoint = true;
+			
+				// First loop the rows whose youtube_url value is not null
+			    for (var i = 0; i < data.features.length; i++) {							    
+			
+					//console.log("feature.coordinates has a length of " + data.features[i].geometry.coordinates.length);
+					
+					for (var j = 0; j < data.features[i].geometry.coordinates.length; j++) {
+					
+						//console.log("feature.coordinates.polygon has a length of " + data.features[i].geometry.coordinates[j].length);
+					
+						for (var k = 0; k < data.features[i].geometry.coordinates[j].length; k++) {
+						
+							//console.log("feature.coordinates.polygon.xy has a length of " + data.features[i].geometry.coordinates[j][k].length);
+							
+							// open the path
+							context.beginPath();
+							
+							for (var l = 0; l < data.features[i].geometry.coordinates[j][k].length; l++) {
+						
+								//console.log("feature.coordinates.polygon.x = " + data.features[i].geometry.coordinates[j][k][l][0]);
+								//console.log("feature.coordinates.polygon.y = " + data.features[i].geometry.coordinates[j][k][l][1]);
+								
+								var point = new L.LatLng(data.features[i].geometry.coordinates[j][k][l][1],data.features[i].geometry.coordinates[j][k][l][0]);
+				
+						        // start coordinates to tile pixels
+						        var start = tile.multiplyBy(tileSize);
+						
+						        // actual coordinates to tile pixel
+						        var p = map.project(point);
+						
+						        // point to draw
+						        var x = Math.round(p.x - start.x);
+						        var y = Math.round(p.y - start.y);
+						
+						        //if first point moveTo
+						        if (firstPoint){
+						        	context.moveTo(x,y);
+						        	firstPoint = false;
+						        }else{
+						        	context.lineTo(x,y);
+						        }
+
+							
+							}
+							
+							// Close the path
+							context.closePath();
+						    context.lineWidth = 1;
+					        context.strokeStyle = "blue";
+					        context.stroke();
+				            context.fillStyle = "rgb(200,0,0)";
+				            context.fill();
+
+						}
+					
+					}	 
+			
+			    }
+ 
+			}
+			
+			map.addLayer(tiles);
+    		
+  		})
+  		.error(function(errors) {
+    		// errors contains a list of errors
+    		console.log("error:" + errors);
+  		})
+  		
+        
+      })
+      .error(function(err) {
+        console.log("error:" + err);
+      });
+
+    }
+
+    window.onload = main;
+
+  </script>
+
+
+</html>
